@@ -1,0 +1,21 @@
+# Version control
+.git
+.gitignore
+
+# Local environments and secrets
+.venv
+.env
+
+# Large local artifacts
+binaries/
+decompai_analysis_sessions/
+source_code/
+reports/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Misc
+.DS_Store
+*.log

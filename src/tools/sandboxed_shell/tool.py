@@ -37,7 +37,11 @@ def _get_platform() -> str:
 
 
 def _get_dockerized_bash_process(
-    mounted_dirs: Dict = {}, workdir: Optional[str] = None
+    mounted_dirs: Optional[Dict] = None,
+    workdir: Optional[str] = None,
+    runner_image: str = "decompai-runner",
+    docker_platform: str = "linux/amd64",
+    privileged: bool = True,
 ) -> Any:
     """Get a new Dockerized Bash process with the specified mounted_dirs and workdir."""
     from src.tools.sandboxed_shell.dockerized_bash import DockerizedBashProcess
@@ -46,6 +50,9 @@ def _get_dockerized_bash_process(
         persistent=True,
         mounted_dirs=mounted_dirs,
         workdir=workdir,
+        runner_image=runner_image,
+        docker_platform=docker_platform,
+        privileged=privileged,
     )
 
 
@@ -59,6 +66,9 @@ class SandboxedShellTool(BaseTool):
 
     # Instance default for mounted directories.
     mounted_dirs: Dict = Field(default_factory=dict)
+    runner_image: str = Field(default="decompai-runner")
+    docker_platform: str = Field(default="linux/amd64")
+    privileged: bool = Field(default=True)
 
     # Mapping from process ID to DockerizedBashProcess instances.
     processes: Dict[str, Any] = Field(default_factory=dict)
@@ -85,7 +95,11 @@ class SandboxedShellTool(BaseTool):
         # If the process doesn't exist, create it.
         if process_id not in self.processes:
             self.processes[process_id] = _get_dockerized_bash_process(
-                mounted_dirs=dirs_to_use, workdir=workdir
+                mounted_dirs=dirs_to_use,
+                workdir=workdir,
+                runner_image=self.runner_image,
+                docker_platform=self.docker_platform,
+                privileged=self.privileged,
             )
 
         process = self.processes[process_id]

@@ -17,11 +17,12 @@ import json
 from pydantic import BaseModel, Field, create_model
 from inspect import Signature, Parameter
 
-import src.config as config
+from src.config import settings
 import src.utils as utils
 from src.utils import disassemble_function
 from src.state import State
 from src.tools.sandboxed_shell import SandboxedShellTool
+from src.utils.docker_env import get_runner_mounts
 
 def get_agent_workspace_path(state: State) -> str:
     """Ensure the workspace folder exists and return its path."""
@@ -29,7 +30,7 @@ def get_agent_workspace_path(state: State) -> str:
     if not session_path:
         raise ValueError("Workspace path not set in state.")
     agent_workspace_path = os.path.join(
-        session_path, config.AGENT_WORKSPACE_NAME)
+        session_path, settings.AGENT_WORKSPACE_NAME)
     os.makedirs(agent_workspace_path, exist_ok=True)
     return agent_workspace_path
 
@@ -55,7 +56,7 @@ def create_tool_function(cls: Type) -> Callable:
     ) -> Any:
         session_path = state["session_path"]
         instance = cls(root_dir=os.path.join(
-            session_path, config.AGENT_WORKSPACE_NAME))
+            session_path, settings.AGENT_WORKSPACE_NAME))
         return instance._run(**kwargs)
 
     # Set the function's name and docstring before decoration
@@ -185,6 +186,7 @@ def extend_args_schema(parent_schema: Type[BaseModel]) -> Type[BaseModel]:
 import src.tools.sandboxed_shell.tool as src_tools_sandboxed_shell_tool
 class CustomSandboxedShellTool(SandboxedShellTool):
     args_schema: Type[BaseModel] = extend_args_schema(src_tools_sandboxed_shell_tool.SandboxedShellInput)
+    runner_image: str = settings.DECOMPAI_RUNNER_IMAGE
 
     def _run(
         self,
@@ -195,7 +197,8 @@ class CustomSandboxedShellTool(SandboxedShellTool):
         # Extract required values from state.
         agent_workspace_path = get_agent_workspace_path(state)
         process_id = state.get("session_path")
-        mounted_dirs = {agent_workspace_path:agent_workspace_path}
+        mounted_dirs = get_runner_mounts()
+        mounted_dirs[agent_workspace_path] = agent_workspace_path
         workdir = agent_workspace_path
         return super()._run(commands, process_id, mounted_dirs, workdir, run_manager)
 

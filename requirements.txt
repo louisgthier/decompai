@@ -1,8 +1,9 @@
-gradio
-langgraph
-langchain
-langchain-openai
-langchain-community
-langchain-experimental
-langchain-google-genai
-pytest
+gradio==5.25.0
+langgraph==0.3.29
+langchain==0.3.23
+langchain-openai==0.3.12
+langchain-community==0.3.21
+langchain-experimental==0.3.4
+langchain-google-genai==2.1.2
+pydantic-settings==2.8.1
+pytest==8.3.5

@@ -1,0 +1,29 @@
+services:
+  app:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: ${DECOMPAI_APP_IMAGE:-louisgauthier/decompai:1.0.0}
+    container_name: decompai
+    environment:
+      - DECOMPAI_RUNNER_IMAGE=${DECOMPAI_RUNNER_IMAGE:-louisgauthier/decompai-runner:1.0.0}
+      - DECOMPAI_RUNNER_BUILD=${DECOMPAI_RUNNER_BUILD:-auto}
+      - DECOMPAI_HOST_ROOT=${DECOMPAI_HOST_ROOT:-${PWD}}
+      - ANALYSIS_SESSIONS_ROOT=${ANALYSIS_SESSIONS_ROOT:-/tmp/decompai_analysis_sessions}
+    volumes:
+      - ./binaries:/app/binaries
+      - ./source_code:/app/source_code
+      - ${ANALYSIS_SESSIONS_ROOT:-/tmp/decompai_analysis_sessions}:${ANALYSIS_SESSIONS_ROOT:-/tmp/decompai_analysis_sessions}
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "7860:7860"
+    restart: unless-stopped
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    platform: linux/amd64
+    image: ${DECOMPAI_RUNNER_IMAGE:-louisgauthier/decompai-runner:1.0.0}

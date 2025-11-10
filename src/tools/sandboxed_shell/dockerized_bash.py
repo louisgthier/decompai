@@ -3,9 +3,18 @@ import uuid
 import logging
 import shlex
 import re
-from typing import List, Union, Dict
+from typing import Dict, List, Union
 
 logger = logging.getLogger(__name__)
+
+
+def _format_mount_flags(mounts: Dict[str, str] | None = None) -> str:
+    """Return docker volume flags for the provided mount mapping."""
+    if not mounts:
+        return ""
+    return "".join(
+        f" -v {shlex.quote(host)}:{container}" for host, container in mounts.items()
+    )
 
 class DockerizedBashProcess:
     """
@@ -22,7 +31,10 @@ class DockerizedBashProcess:
         return_err_output: bool = False,
         persistent: bool = False,
         workdir: str = "/",
-        mounted_dirs: Dict[str, str] = {},
+        mounted_dirs: Dict[str, str] | None = None,
+        runner_image: str = "decompai-runner",
+        docker_platform: str = "linux/amd64",
+        privileged: bool = True,
     ):
         """
         Initialize the DockerizedBashProcess.
@@ -38,7 +50,10 @@ class DockerizedBashProcess:
         self.container_id = None
         self.persistent_process = None  # Will hold our persistent shell subprocess
         self.workdir = workdir
-        self.mounted_dirs = mounted_dirs
+        self.mounted_dirs = mounted_dirs or {}
+        self.runner_image = runner_image
+        self.docker_platform = docker_platform
+        self.privileged = privileged
         if persistent:
             # Create a unique container name and initialize the persistent container.
             self.container_name = f"sandbox_{uuid.uuid4().hex[:8]}"
@@ -50,11 +65,13 @@ class DockerizedBashProcess:
         The container is run with a dummy command (tail -f /dev/null) to keep it alive.
         """
         
-        mounted_dirs_args = "".join([f" -v {host_dir}:{container_dir}" for host_dir, container_dir in self.mounted_dirs.items()])
+        mounted_dirs_args = _format_mount_flags(self.mounted_dirs)
         workdir_arg = f" -w {self.workdir}" if self.workdir else ""
-        
+        privileged_arg = " --privileged" if self.privileged else ""
+
         docker_run_command = (
-            f"docker run --rm -d --privileged --name {container_name}{mounted_dirs_args}{workdir_arg} --platform linux/amd64 decompai-runner tail -f /dev/null"
+            f"docker run --rm -d{privileged_arg} --name {container_name}{mounted_dirs_args}{workdir_arg}"
+            f" --platform {self.docker_platform} {self.runner_image} tail -f /dev/null"
         )
         try:
             result = subprocess.run(
@@ -131,9 +148,13 @@ class DockerizedBashProcess:
         """
         # Use shlex.quote to safely escape the command.
         safe_command = shlex.quote(command)
-        mounted_dirs_args = "".join([f" -v {host_dir}:{container_dir}" for host_dir, container_dir in self.mounted_dirs.items()])
+        mounted_dirs_args = _format_mount_flags(self.mounted_dirs)
         workdir_arg = f" -w {self.workdir}" if self.workdir else ""
-        docker_run_command = f"docker run --rm{mounted_dirs_args}{workdir_arg} --platform linux/amd64 decompai-runner bash -c {safe_command}"
+        privileged_arg = " --privileged" if self.privileged else ""
+        docker_run_command = (
+            f"docker run --rm{privileged_arg}{mounted_dirs_args}{workdir_arg} --platform {self.docker_platform} "
+            f"{self.runner_image} bash -c {safe_command}"
+        )
         try:
             result = subprocess.run(
                 docker_run_command,

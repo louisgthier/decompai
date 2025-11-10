@@ -29,7 +29,7 @@ import shutil
 import dotenv
 import logging
 
-import src.config as config
+from src.config import settings
 import src.utils as utils
 import src.tools as tools
 from src.tools.sandboxed_shell import SandboxedShellTool
@@ -175,11 +175,11 @@ def load_state(session_path: str) -> dict:
 def erase_session(session_path: str):
     if os.path.exists(session_path):
         # Ensure the path starts with the analysis sessions root
-        if not session_path.startswith(f"{config.ANALYSIS_SESSIONS_ROOT}/"):
+        if not session_path.startswith(f"{settings.ANALYSIS_SESSIONS_ROOT}/"):
             raise ValueError(f"Invalid session path: {session_path}")
         else:
             # Delete the workspace folder
-            agent_workspace_path = os.path.join(session_path, config.AGENT_WORKSPACE_NAME)
+            agent_workspace_path = os.path.join(session_path, settings.AGENT_WORKSPACE_NAME)
             if os.path.exists(agent_workspace_path):
                 shutil.rmtree(agent_workspace_path)
                 

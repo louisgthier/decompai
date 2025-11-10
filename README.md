@@ -1,6 +1,6 @@
 # DecompAI: Binary Analysis and Decompilation Agent
 
-DecompAI is a Gradio-based LLM agent that automates binary analysis and decompilation workflows. Whether you’re a newcomer to reverse engineering or an experienced practitioner, DecompAI helps you explore, debug, and decompile x86 Linux binaries in a conversational interface.
+DecompAI is a LangGraph & Gradio-based LLM agent that automates binary analysis and decompilation workflows. Whether you’re a newcomer to reverse engineering or an experienced practitioner, DecompAI helps you explore, debug, and decompile x86 Linux binaries in a conversational interface.
 
 ---
 
@@ -52,24 +52,53 @@ pip install -r requirements.txt
 ```dotenv
 OPENAI_API_KEY=sk-proj-ABC...
 GEMINI_API_KEY=ya29.A0AR...
-LLM_MODEL=gemini-2.0-flash      # or gemini-2.5-flash-preview-04-17
+LLM_MODEL=gemini-2.5-pro      # or gemini-2.5-flash for cost-effective usage
 ```
 
 Other OpenAI or Gemini models work too, and providers using the OpenAI client can be used with minor code tweaks.
 
-3. **Docker**  
-   Ensure Docker is installed and running; DecompAI uses a privileged Kali-based container to expose many binary analysis tools.
+3. **Containers (recommended)**  
+   Build/run the stack locally (the runner image builds automatically the first time):
+
+   ```bash
+   DECOMPAI_HOST_ROOT=$PWD docker compose up -d
+   ```
+
+   This compiles the Python app image, builds the Kali runner once (the build takes a while because it installs Ghidra, radare2 plugins, and other tooling), mounts your workspace, forwards port 7860, and reuses the host Docker daemon through `/var/run/docker.sock`. Windows PowerShell users can run `DECOMPAI_HOST_ROOT=$(Get-Location) docker compose up -d`.
+
+4. **Local Python (optional)**  
+   Prefer working outside Docker? Install the deps (step 1) and run `python run.py`; the app will still launch runner containers for tooling, and you can switch images via `export DECOMPAI_RUNNER_IMAGE=...`.
 
 ---
 
 ## Docker & First-Run Build
 
-- **Automatic Build Trigger**  
-  On your first binary upload, the Docker image build will start automatically.
-- **Long Build Time**  
-  Building can take **15+ minutes**. We plan to publish prebuilt images to a container registry; contributions to automate this in CI/CD are welcome.
-- **Privileged Container**  
-  The container runs in privileged mode to allow low-level tool execution—please audit code and run in a secure environment.
+- **Prebuilt Images**  
+  `louisgauthier/decompai:1.0.0` (app) and `louisgauthier/decompai-runner:1.0.0` (Kali runner) are pushed for every release. Update locally with `docker compose pull`.
+- **Runner Lifecycle**  
+  The app creates short-lived runner containers whenever it needs to execute `objdump`, `gdb`, or Ghidra tooling. Override the tag with `DECOMPAI_RUNNER_IMAGE=<user/image:tag>` if you are testing a custom build.
+- **Local Dockerfile Iteration**  
+  After editing `Dockerfile.runner`, rebuild and reuse cached layers:
+
+  ```bash
+  DOCKER_BUILDKIT=1 docker buildx build --platform linux/amd64 \
+    -f Dockerfile.runner -t decompai-runner:dev .
+  export DECOMPAI_RUNNER_IMAGE=decompai-runner:dev
+  python run.py   # or docker compose up -d
+  ```
+- Set `DECOMPAI_RUNNER_BUILD=true` if you want the app to rebuild `Dockerfile.runner` automatically before executing tools.
+- **App Image Build & Publish**  
+  Release both images together so contributors can pull matching tags:
+
+  ```bash
+  docker buildx build --platform linux/amd64 -f Dockerfile -t louisgauthier/decompai:1.0.0 .
+  docker push louisgauthier/decompai:1.0.0
+
+  docker buildx build --platform linux/amd64 -f Dockerfile.runner -t louisgauthier/decompai-runner:1.0.0 .
+  docker push louisgauthier/decompai-runner:1.0.0
+  ```
+- **Privileged Execution**  
+  Runner containers still require `--privileged` to expose low-level tooling; audit any dependency additions before publishing.
 
 ---
 

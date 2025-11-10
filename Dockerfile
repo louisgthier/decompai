@@ -1,38 +1,34 @@
-# Use the official GCC image
-# FROM gcc_linux_x86_64:latest
-FROM kalilinux/kali-rolling:latest AS base
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim AS base
 
-RUN apt update && apt -y install kali-linux-headless && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Set environment variables for Ghidra
-ENV GHIDRA_VERSION=11.3.1
-ENV GHIDRA_HOME=/opt/ghidra
-ENV GHIDRA_URL=https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.3.1_build/ghidra_11.3.1_PUBLIC_20250219.zip
+WORKDIR /app
 
-# Download and install Ghidra
-RUN wget -O /tmp/ghidra.zip $GHIDRA_URL && \
-    unzip /tmp/ghidra.zip -d /opt && \
-    rm /tmp/ghidra.zip && \
-    mv /opt/ghidra_${GHIDRA_VERSION}_PUBLIC $GHIDRA_HOME
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Add Ghidra to PATH
-ENV PATH="$GHIDRA_HOME:$GHIDRA_HOME/support:$PATH"
+ARG DOCKER_VERSION=27.5.1
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz \
+    | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
 
+ARG BUILDX_VERSION=v0.15.1
+RUN mkdir -p /usr/lib/docker/cli-plugins && \
+    curl -fsSL https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64 \
+        -o /usr/lib/docker/cli-plugins/docker-buildx && \
+    chmod +x /usr/lib/docker/cli-plugins/docker-buildx
 
-# # Install Java (required for Ghidra)
-RUN apt-get update && apt-get install -y openjdk-21-jdk wget unzip && \
-rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install ninja and meson
-RUN apt-get update && apt-get install -y ninja-build meson pkg-config && \
-    rm -rf /var/lib/apt/lists/*
+COPY . .
 
-# Install r2dec
-RUN r2pm -U && \
-    r2pm -i r2dec && \
-    r2pm -ci r2ghidra
+EXPOSE 7860
 
-WORKDIR /
+ENV DECOMPAI_RUNNER_IMAGE=louisgauthier/decompai-runner:1.0.0
 
-# Command to keep the container alive (if needed)
-CMD ["bash"]
+CMD ["python", "run.py"]

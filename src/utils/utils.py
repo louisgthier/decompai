@@ -7,29 +7,33 @@ import hashlib
 import shutil
 import json
 import uuid
+import shlex
 
-import src.config as config
+from src.config import settings
+from src.utils.docker_env import (
+    format_mount_flags,
+    get_runner_mounts,
+    should_build_runner_image,
+)
 
-os.makedirs(config.ANALYSIS_SESSIONS_ROOT, exist_ok=True)
-
-DOCKER_IMAGE = "decompai-runner"
+os.makedirs(settings.ANALYSIS_SESSIONS_ROOT, exist_ok=True)
 
 image_built = False
 
 
 def build_docker_image():
     global image_built
-    if image_built:
+    if image_built or not should_build_runner_image():
         return
     docker_build_command = (
-        f"docker buildx build --platform linux/amd64 -f Dockerfile "
-        f"-t {DOCKER_IMAGE} . --load"
+        f"docker buildx build --platform linux/amd64 -f Dockerfile.runner "
+        f"-t {settings.DECOMPAI_RUNNER_IMAGE} . --load"
     )
     subprocess.run(docker_build_command, shell=True, check=True)
     image_built = True
 
 def get_binary_path_in_workspace(binary_path: str) -> str:
-    return os.path.join(os.path.dirname(binary_path), config.AGENT_WORKSPACE_NAME, os.path.basename(binary_path))
+    return os.path.join(os.path.dirname(binary_path), settings.AGENT_WORKSPACE_NAME, os.path.basename(binary_path))
 
 class CommandResult:
     def __init__(self, stdout: str, stderr: str, combined: str):
@@ -46,13 +50,12 @@ def run_command_in_docker(command: str) -> CommandResult:
 
     container_name = "decompai-runner-" + str(uuid.uuid4())
 
+    mount_flags = format_mount_flags(get_runner_mounts())
     docker_run_command = (
-        f"docker run --rm --name {container_name} "
-        f"-v {config.ANALYSIS_SESSIONS_ROOT}:{config.ANALYSIS_SESSIONS_ROOT} "
-        f"-v ./binaries:/binaries "
-        f"-v ./source_code:/source_code "
-        f"--platform linux/amd64 -w / {DOCKER_IMAGE} "
-        f"/bin/sh -c \"{command}\""
+        f"docker run --rm --name {container_name}"
+        f"{mount_flags} "
+        f"--platform linux/amd64 -w / {settings.DECOMPAI_RUNNER_IMAGE} "
+        f"/bin/sh -c {shlex.quote(command)}"
     )
     
     print(f"Running command in docker: {docker_run_command}")
@@ -89,11 +92,11 @@ def create_session_for_binary(binary_source_path: str) -> str:
     # Compute the hash for the binary
     binary_hash = hash_file(binary_source_path)
     # Create session directory if it doesn't exist
-    session_path = os.path.join(config.ANALYSIS_SESSIONS_ROOT, binary_hash)
+    session_path = os.path.join(settings.ANALYSIS_SESSIONS_ROOT, binary_hash)
     os.makedirs(session_path, exist_ok=True)
     # Create agent workspace directory if it doesn't exist
     agent_workspace_path = os.path.join(
-        session_path, config.AGENT_WORKSPACE_NAME)
+        session_path, settings.AGENT_WORKSPACE_NAME)
     os.makedirs(agent_workspace_path, exist_ok=True)
     # Copy the binary into the session directory
     binary_filename = os.path.basename(binary_source_path)
@@ -211,7 +214,7 @@ def disassemble_function(binary_path, function_name):
 
 
 def compile_and_disassemble_c_code(c_code_path, function_name, target_platform):
-    binary_path = os.path.join(config.ANALYSIS_SESSIONS_ROOT, "compiled_binary")
+    binary_path = os.path.join(settings.ANALYSIS_SESSIONS_ROOT, "compiled_binary")
 
     if target_platform == "mac":
         function_name = "_" + function_name
@@ -227,12 +230,12 @@ def compile_and_disassemble_c_code(c_code_path, function_name, target_platform):
 
 def disassemble(input_path, function_name):
     # If the root sessions directory does not exist, create it
-    if not os.path.exists(config.ANALYSIS_SESSIONS_ROOT):
-        os.makedirs(config.ANALYSIS_SESSIONS_ROOT)
+    if not os.path.exists(settings.ANALYSIS_SESSIONS_ROOT):
+        os.makedirs(settings.ANALYSIS_SESSIONS_ROOT)
 
     # Copy the C code or binary to the workspace for reference
     input_basename = os.path.basename(input_path)
-    workspace_input_path = os.path.join(config.ANALYSIS_SESSIONS_ROOT, input_basename)
+    workspace_input_path = os.path.join(settings.ANALYSIS_SESSIONS_ROOT, input_basename)
     if not os.path.exists(workspace_input_path):
         os.system(f"cp {input_path} {workspace_input_path}")
 
